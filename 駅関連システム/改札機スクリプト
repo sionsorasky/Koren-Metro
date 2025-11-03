@@ -1,0 +1,172 @@
+-- ======================================
+-- 設定部分
+-- ======================================
+local requiredToolName = "Soica" -- 通過に必要なアイテム名を設定
+local enableRainbowEffect = true -- 🌈虹エフェクトを有効にするか（falseで通常エラー扱い）
+local errorGuiDuration = 3       -- Stop表示の時間（秒）
+local liteEffectDuration = 3     -- 虹エフェクトの時間（秒）
+local doorStayDuration = 3       -- ドアが開いたままの時間（秒）
+
+-- ======================================
+-- 各種参照
+-- ======================================
+local enterPart = script.Parent:WaitForChild("Enter")
+local LMove = script.Parent:WaitForChild("LMove")
+local RMove = script.Parent:WaitForChild("RMove")
+local LOpen = script.Parent:WaitForChild("LOpen")
+local ROpen = script.Parent:WaitForChild("ROpen")
+local LClose = script.Parent:WaitForChild("LClose")
+local RClose = script.Parent:WaitForChild("RClose")
+
+local TweenService = game:GetService("TweenService")
+
+local tweenInfo = TweenInfo.new(
+	0.5,
+	Enum.EasingStyle.Sine,
+	Enum.EasingDirection.Out
+)
+
+local isMoving = false
+
+-- ======================================
+-- GUI制御
+-- ======================================
+local function setVisibleForAll(folderName, frameName, value)
+	for _, obj in pairs(script.Parent:GetChildren()) do
+		if obj.Name == folderName and obj:FindFirstChild("SurfaceGui") then
+			local frame = obj.SurfaceGui:FindFirstChild("Frame")
+			if frame and frame:FindFirstChild(frameName) then
+				frame[frameName].Visible = value
+			end
+		end
+	end
+end
+
+-- ======================================
+-- ライト制御
+-- ======================================
+local function setLiteState(normalTrans, nijiTrans)
+	for _, lite in pairs(script.Parent:GetChildren()) do
+		if lite.Name == "Lite" then
+			local normal = lite:FindFirstChild("Normal")
+			local niji1 = lite:FindFirstChild("NijiOne")
+			local niji2 = lite:FindFirstChild("NijiTwo")
+			if normal then normal.Transparency = normalTrans end
+			if niji1 then niji1.Transparency = nijiTrans end
+			if niji2 then niji2.Transparency = nijiTrans end
+		end
+	end
+end
+
+-- ======================================
+-- メイン処理
+-- ======================================
+enterPart.Touched:Connect(function(hit)
+	if isMoving then return end
+
+	local character = hit.Parent
+	if not character then return end
+
+	local player = game.Players:GetPlayerFromCharacter(character)
+	if not player then return end
+
+	local tool = character:FindFirstChildOfClass("Tool")
+
+	-- 音
+	local errorSound = enterPart:FindFirstChild("Error")
+	local nijiSound = enterPart:FindFirstChild("Niji")
+	local openSound = enterPart:FindFirstChild("Sound")
+
+	-- =============================
+	-- 持ち物なし（完全エラー）
+	-- =============================
+	if not tool then
+		if errorSound and not errorSound.IsPlaying then
+			errorSound:Play()
+		end
+		setVisibleForAll("Result", "Stop", true)
+		task.delay(errorGuiDuration, function()
+			setVisibleForAll("Result", "Stop", false)
+		end)
+		return
+	end
+
+	-- =============================
+	-- 🌈 Soica以外
+	-- =============================
+	if tool.Name ~= requiredToolName then
+		if enableRainbowEffect then
+			-- 🌈 虹エフェクト処理
+			if nijiSound and not nijiSound.IsPlaying then
+				nijiSound:Play()
+			end
+			setVisibleForAll("Result", "Stop", true)
+			setLiteState(1, 0)
+
+			task.delay(liteEffectDuration, function()
+				setLiteState(0, 1)
+				setVisibleForAll("Result", "Stop", false)
+			end)
+		else
+			-- 🚫 通常エラー扱い
+			if errorSound and not errorSound.IsPlaying then
+				errorSound:Play()
+			end
+			setVisibleForAll("Result", "Stop", true)
+			task.delay(errorGuiDuration, function()
+				setVisibleForAll("Result", "Stop", false)
+			end)
+		end
+		return
+	end
+
+	-- =============================
+	-- ✅ Soicaで認証OK
+	-- =============================
+	isMoving = true
+
+	setVisibleForAll("IC", "ImageLabel", true)
+	setVisibleForAll("Result", "Go", true)
+
+	local LGoalOpen = {
+		Orientation = LMove.Orientation + Vector3.new(0, 90, 0),
+		Position = LOpen.Position
+	}
+	local RGoalOpen = {
+		Orientation = RMove.Orientation + Vector3.new(0, -90, 0),
+		Position = ROpen.Position
+	}
+
+	enterPart.CanCollide = false
+	if openSound then
+		openSound:Play()
+	end
+
+	local LTweenOpen = TweenService:Create(LMove, tweenInfo, LGoalOpen)
+	local RTweenOpen = TweenService:Create(RMove, tweenInfo, RGoalOpen)
+	LTweenOpen:Play()
+	RTweenOpen:Play()
+
+	task.wait(doorStayDuration)
+
+	local LGoalClose = {
+		Orientation = LMove.Orientation + Vector3.new(0, -90, 0),
+		Position = LClose.Position
+	}
+	local RGoalClose = {
+		Orientation = RMove.Orientation + Vector3.new(0, 90, 0),
+		Position = RClose.Position
+	}
+
+	enterPart.CanCollide = true
+	local LTweenClose = TweenService:Create(LMove, tweenInfo, LGoalClose)
+	local RTweenClose = TweenService:Create(RMove, tweenInfo, RGoalClose)
+	LTweenClose:Play()
+	RTweenClose:Play()
+
+	task.wait(0.6)
+	setVisibleForAll("IC", "ImageLabel", false)
+	setVisibleForAll("Result", "Go", false)
+
+	isMoving = false
+end)
